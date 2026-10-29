@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Табло змін — Станція Люмо</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #0d0d16; color: #eee;
+    display: flex; flex-direction: column;
+    transition: background 2s, filter 2s;
+  }
+  body.night { background: #05050a; }
+  body.night .dim-at-night { opacity: 0.45; }
+
+  /* ── вертикальна мітка вирівнювання маятника ── */
+  #alignMarker {
+    position: fixed; top: 0; bottom: 84px;
+    width: 2px; background: rgba(109, 74, 255, 0.55);
+    left: 50%; transform: translateX(-50%);
+    pointer-events: none; z-index: 50;
+  }
+  #alignMarker::before, #alignMarker::after {
+    content: ""; position: absolute; left: -4px;
+    width: 10px; height: 10px;
+    border: 2px solid rgba(109, 74, 255, 0.8);
+    background: transparent; border-radius: 50%;
+  }
+  #alignMarker::before { top: 0; }
+  #alignMarker::after { bottom: 0; }
+
+  /* ── шапка ── */
+  header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 18px 42px 10px;
+  }
+  #clock {
+    font-size: 4.2vw; font-weight: 200; letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  #dateLine { font-size: 1.3vw; color: #888; text-align: right; line-height: 1.5; }
+
+  /* ── статус зміни ── */
+  #shiftBar {
+    margin: 0 42px 14px;
+    display: flex; align-items: center; gap: 22px;
+    padding: 14px 24px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    border-left: 8px solid #444;
+    transition: border-color 1s, background 1s;
+  }
+  #shiftTitle { font-size: 2.4vw; font-weight: 600; }
+  #shiftSub { font-size: 1.1vw; color: #999; }
+  #countdown {
+    margin-left: auto; text-align: right;
+  }
+  #countdown .lbl { font-size: 1vw; color: #888; text-transform: uppercase; letter-spacing: 0.15em; }
+  #countdown .val {
+    font-size: 2.6vw; font-weight: 300; font-variant-numeric: tabular-nums;
+  }
+
+  /* ── бригади ── */
+  #brigades {
+    flex: 1; display: flex; gap: 16px;
+    padding: 0 42px; margin-bottom: 14px;
+  }
+  .bcard {
+    flex: 1; border-radius: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 2px solid transparent;
+    padding: 18px 20px;
+    display: flex; flex-direction: column;
+    transition: opacity 0.8s, border-color 0.8s, transform 0.3s;
+  }
+  .bcard.resting { opacity: 0.35; }
+  .bcard.active-day, .bcard.active-night { transform: scale(1.02); }
+  .bnum { font-size: 3vw; font-weight: 700; }
+  .bstat { margin-top: auto; font-size: 1.15vw; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  .bsub { font-size: 0.95vw; color: #888; margin-top: 6px; }
+
+  .b1 .bnum, .b1 .bstat { color: #7aa7e0; } .bcard.b1.active-day, .bcard.b1.active-night { border-color: #4a7fc1; background: rgba(74,127,193,0.10); }
+  .b2 .bnum, .b2 .bstat { color: #e09a5f; } .bcard.b2.active-day, .bcard.b2.active-night { border-color: #c1783a; background: rgba(193,120,58,0.10); }
+  .b3 .bnum, .b3 .bstat { color: #6fc79a; } .bcard.b3.active-day, .bcard.b3.active-night { border-color: #4a9b6e; background: rgba(74,155,110,0.10); }
+  .b4 .bnum, .b4 .bstat { color: #c08ac4; } .bcard.b4.active-day, .bcard.b4.active-night { border-color: #9b5ea0; background: rgba(155,94,160,0.10); }
+
+  /* ── шкала доби ── */
+  #rulerWrap {
+    height: 70px; margin: 0 42px 16px;
+    position: relative;
+  }
+  #rulerTicks {
+    position: absolute; inset: 0;
+    display: flex;
+  }
+  .tick {
+    flex: 1; border-left: 1px solid #333; position: relative;
+  }
+  .tick.major { border-left: 1px solid #666; }
+  .tick .tlbl {
+    position: absolute; top: 4px; left: 5px;
+    font-size: 0.75vw; color: #666;
+    font-variant-numeric: tabular-nums;
+  }
+  .tick.major .tlbl { color: #aaa; }
+  #carriagePos {
+    position: absolute; top: -14px; bottom: 0;
+    border-left: 3px solid #6d4aff;
+    box-shadow: -6px 0 24px rgba(109,74,255,0.35);
+    transition: left 60s linear; /* плавний рух 1 см/год */
+  }
+  #carriagePos::after {
+    content: "▲";
+    position: absolute; top: -20px; left: -7px;
+    color: #6d4aff; font-size: 14px;
+  }
+  #rulerCaption {
+    position: absolute; top: 34px; right: 0;
+    font-size: 0.8vw; color: #555;
+  }
+
+  /* ── панель налаштувань ── */
+  #settings {
+    position: fixed; right: 16px; bottom: 92px;
+    background: #16162a; border: 1px solid #333;
+    border-radius: 10px; padding: 16px;
+    display: none; z-index: 100; font-size: 0.9em;
+  }
+  #settings.open { display: block; }
+  #settings label { display: block; margin: 8px 0 3px; color: #999; }
+  #settings select {
+    background: #222; color: #eee; border: 1px solid #444;
+    border-radius: 6px; padding: 6px 10px; font-size: 1em;
+  }
+  #gearBtn {
+    position: fixed; right: 16px; bottom: 16px;
+    background: none; border: 1px solid #333; color: #555;
+    border-radius: 50%; width: 40px; height: 40px;
+    font-size: 18px; cursor: pointer; z-index: 100;
+  }
+  #gearBtn:hover { color: #aaa; border-color: #555; }
+</style>
+</head>
+<body>
+
+<div id="alignMarker" class="dim-at-night"></div>
+
+<header>
+  <div id="clock">--:--</div>
+  <div id="dateLine">завантаження…</div>
+</header>
+
+<div id="shiftBar">
+  <div>
+    <div id="shiftTitle">—</div>
+    <div id="shiftSub">—</div>
+  </div>
+  <div id="countdown">
+    <div class="lbl">до передачі зміни</div>
+    <div class="val" id="cdVal">--:--:--</div>
+  </div>
+</div>
+
+<div id="brigades">
+  <div class="bcard b1"><div class="bnum">Б1</div><div class="bstat">—</div><div class="bsub">—</div></div>
+  <div class="bcard b2"><div class="bnum">Б2</div><div class="bstat">—</div><div class="bsub">—</div></div>
+  <div class="bcard b3"><div class="bnum">Б3</div><div class="bstat">—</div><div class="bsub">—</div></div>
+  <div class="bcard b4"><div class="bnum">Б4</div><div class="bstat">—</div><div class="bsub">—</div></div>
+</div>
+
+<div id="rulerWrap" class="dim-at-night">
+  <div id="rulerTicks"></div>
+  <div id="carriagePos"></div>
+  <div id="rulerCaption">шкала доби: 1 поділка = 1 година = 1 см ходу каретки · хрест ▲ = розрахункова позиція каретки Люмо</div>
+</div>
+
+<button id="gearBtn" title="Налаштування">⚙</button>
+<div id="settings">
+  <label>Бригада на денній зміні 1 числа поточного місяця:</label>
+  <select id="startSel">
+    <option value="1">Бригада 1</option>
+    <option value="2">Бригада 2</option>
+    <option value="3">Бригада 3</option>
+    <option value="4">Бригада 4</option>
+  </select>
+  <label>Станція вирівнювання (мітка маятника):</label>
+  <select id="centerMode">
+    <option value="0">Центр шкали (12:00) — медаль на рівні каретки</option>
+    <option value="1">Поточна позиція каретки</option>
+    <option value="2">Вимкнена</option>
+  </select>
+</div>
+
+<script>
+const WD_FULL = ["неділя","понеділок","вівторок","середа","четвер","п'ятниця","субота"];
+const MONTHS_GEN = ["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
+
+const elClock = document.getElementById("clock");
+const elDate  = document.getElementById("dateLine");
+const elTitle = document.getElementById("shiftTitle");
+const elSub   = document.getElementById("shiftSub");
+const elCd    = document.getElementById("cdVal");
+const elBar   = document.getElementById("shiftBar");
+const cards   = [null,1,2,3,4].slice(1).map(i => document.querySelector(".bcard.b" + i));
+const elCarriage = document.getElementById("carriagePos");
+const elMarker = document.getElementById("alignMarker");
+
+// ── шкала доби: 24 поділки ──
+(function buildRuler() {
+  const t = document.getElementById("rulerTicks");
+  for (let h = 0; h < 24; h++) {
+    const d = document.createElement("div");
+    d.className = "tick" + (h % 6 === 0 ? " major" : "");
+    d.innerHTML = '<span class="tlbl">' + String(h).padStart(2, "0") + '</span>';
+    t.appendChild(d);
+  }
+})();
+
+function getStartBrigade() {
+  return parseInt(document.getElementById("startSel").value, 10);
+}
+
+// бригада на денній зміні для заданої дати
+function dayShiftBrigade(date) {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1);
+  const offset = Math.floor((date - first) / 86400000);
+  return ((offset % 4) + 4 + (getStartBrigade() - 1)) % 4 + 1;
+}
+// бригада на нічній зміні = та, що напередодні була на денній
+function nightShiftBrigade(date) {
+  const prev = new Date(date); prev.setDate(prev.getDate() - 1);
+  return dayShiftBrigade(prev);
+}
+
+function pad(n) { return String(n).padStart(2, "0"); }
+
+function update() {
+  const now = new Date();
+  const h = now.getHours();
+
+  // годинник
+  elClock.textContent = pad(h) + ":" + pad(now.getMinutes());
+  elDate.innerHTML = WD_FULL[now.getDay()] + ", " + now.getDate() + " " + MONTHS_GEN[now.getMonth()] + " " + now.getFullYear() + "<br>станція: монітор-табло · цикл 4 бригади";
+
+  // тип зміни
+  const isDay = (h >= 8 && h < 19);
+  const dB = dayShiftBrigade(now);
+  const nB = nightShiftBrigade(now);
+  const activeB = isDay ? dB : nB;
+  const shiftKind = isDay ? "active-day" : "active-night";
+  const shiftName = isDay ? "ДЕННА ЗМІНА" : "НИЧНА ЗМІНА";
+  const shiftTime = isDay ? "8:00 – 19:00" : "19:00 – 8:00";
+
+  document.body.classList.toggle("night", !isDay);
+
+  elTitle.textContent = shiftName + " · БРИГАДА " + activeB;
+  elSub.textContent = "Прийняла зміну о " + (isDay ? "8:00" : "19:00") + " · " + shiftTime + " · на змінній концепції Люмо";
+  elBar.style.borderLeftColor = ["#444","#4a7fc1","#c1783a","#4a9b6e","#9b5ea0"][activeB];
+
+  // зворотний відлік до 8:00 або 19:00
+  const target = new Date(now);
+  if (h < 8)        { target.setHours(8, 0, 0, 0); }
+  else if (h < 19)  { target.setHours(19, 0, 0, 0); }
+  else              { target.setDate(target.getDate() + 1); target.setHours(8, 0, 0, 0); }
+  let s = Math.max(0, Math.floor((target - now) / 1000));
+  const hh = Math.floor(s / 3600), mm = Math.floor(s % 3600 / 60), ss = s % 60;
+  elCd.textContent = (hh > 0 ? hh + " год " : "") + pad(mm) + ":" + pad(ss);
+
+  // картки бригад
+  cards.forEach((card, idx) => {
+    const b = idx + 1;
+    card.classList.remove("active-day", "active-night", "resting");
+    const stat = card.querySelector(".bstat");
+    const sub  = card.querySelector(".bsub");
+    if (b === activeB) {
+      card.classList.add(shiftKind);
+      stat.textContent = isDay ? "НА ДЕННІЙ" : "НА НІЧНІЙ";
+      const endsAt = new Date(target);
+      sub.textContent = "до кінця " + (hh > 0 ? hh + " год" : mm + " хв");
+    } else if (!isDay && b === dB) {
+      stat.textContent = "ГОТУЄТЬСЯ";
+      card.classList.add("resting");
+      sub.textContent = "виходить на денну о 8:00";
+    } else if (isDay && b === nB) {
+      stat.textContent = "ВІДПОЧИВАЄ";
+      card.classList.add("resting");
+      sub.textContent = "зросла з нічної о 8:00";
+    } else {
+      // обчислити, скільки днів до виходу
+      let next = new Date(now);
+      for (let k = 1; k <= 4; k++) {
+        next.setDate(next.getDate() + k);
+        if (dayShiftBrigade(next) === b) break;
+      }
+      const nextIsDay = true;
+      stat.textContent = "ВІДПОЧИВАЄ";
+      sub.textContent = "на денну " + next.getDate() + "." + pad(next.getMonth() + 1) + " о 8:00";
+      card.classList.add("resting");
+    }
+  });
+
+  // позиція каретки: 1 поділка = 1 година від 0:00, рух плавний (оновлюється щосекунди)
+  const fracOfDay = (now.getSeconds() / 3600) + now.getMinutes() / 60 + h;
+  elCarriage.style.left = (fracOfDay / 24 * 100) + "%";
+
+  // станція вирівнювання
+  const mode = document.getElementById("centerMode").value;
+  if (mode === "0") {
+    elMarker.style.display = "block";
+    elMarker.style.left = "50%";
+  } else if (mode === "1") {
+    elMarker.style.display = "block";
+    elMarker.style.left = elCarriage.style.left;
+  } else {
+    elMarker.style.display = "none";
+  }
+}
+
+document.getElementById("gearBtn").addEventListener("click", () => {
+  document.getElementById("settings").classList.toggle("open");
+});
+document.getElementById("startSel").addEventListener("change", update);
+document.getElementById("centerMode").addEventListener("change", update);
+
+update();
+setInterval(update, 1000);
+</script>
+
+</body>
+</html>
