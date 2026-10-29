@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Графік змін — 4 бригади</title>
+<style>
+  :root {
+    --b1: #4a7fc1; --b1bg: #dbe7f5;
+    --b2: #c1783a; --b2bg: #f5e5d5;
+    --b3: #4a9b6e; --b3bg: #d9efe2;
+    --b4: #9b5ea0; --b4bg: #eedaf0;
+    --rest: #f4f4f4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #fafafa; color: #222;
+    padding: 24px; max-width: 900px; margin: 0 auto;
+  }
+  h1 { font-size: 1.4em; margin-bottom: 4px; }
+  .sub { color: #666; font-size: 0.9em; margin-bottom: 18px; }
+  .controls {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    background: #fff; border: 1px solid #ddd; border-radius: 8px;
+    padding: 12px 16px; margin-bottom: 18px;
+  }
+  .controls label { font-size: 0.85em; color: #555; }
+  .controls select {
+    padding: 6px 10px; border: 1px solid #bbb; border-radius: 6px;
+    font-size: 0.9em; background: #fff;
+  }
+  table {
+    border-collapse: collapse; width: 100%; background: #fff;
+    font-size: 0.88em;
+  }
+  th, td { border: 1px solid #ccc; padding: 7px 10px; text-align: center; }
+  thead th { background: #2d2d2d; color: #fff; font-weight: 600; position: sticky; top: 0; }
+  tbody tr:nth-child(even) { background: #f6f6f6; }
+  tbody tr.weekend td.date { background: #ffe9e9; }
+  tbody tr.today td { outline: 2px solid #6d4aff; outline-offset: -2px; }
+  td.date { font-weight: 600; white-space: nowrap; }
+  .cell { font-weight: 600; white-space: nowrap; }
+  .b1 { background: var(--b1bg); color: var(--b1); }
+  .b2 { background: var(--b2bg); color: var(--b2); }
+  .b3 { background: var(--b3bg); color: var(--b3); }
+  .b4 { background: var(--b4bg); color: var(--b4); }
+  .restcell { background: var(--rest); color: #999; }
+  .legend {
+    display: flex; gap: 14px; flex-wrap: wrap; margin: 16px 0 6px;
+    font-size: 0.85em; align-items: center;
+  }
+  .legend .swatch {
+    display: inline-block; width: 14px; height: 14px;
+    border-radius: 3px; margin-right: 5px; vertical-align: -2px;
+  }
+  h2 { font-size: 1.05em; margin: 26px 0 10px; }
+  .stats td:first-child { font-weight: 600; }
+  .note {
+    margin-top: 18px; font-size: 0.82em; color: #777;
+    background: #f0f0f5; border-left: 4px solid #6d4aff;
+    padding: 10px 14px; border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Графік змін — 4 бригади</h1>
+<div class="sub">Денна зміна 8:00–19:00 (11 год) · Нічна зміна 19:00–8:00 (13 год) · Після нічні — 2 доби відпочинку, цикл 4 доби</div>
+
+<div class="controls">
+  <label>Місяць:
+    <select id="monthSel"></select>
+  </label>
+  <label>День 1-го числа на денній зміні:
+    <select id="startSel">
+      <option value="1">Бригада 1</option>
+      <option value="2">Бригада 2</option>
+      <option value="3">Бригада 3</option>
+      <option value="4">Бригада 4</option>
+    </select>
+  </label>
+</div>
+
+<div class="legend">
+  <span><span class="swatch b1"></span>Бригада 1</span>
+  <span><span class="swatch b2"></span>Бригада 2</span>
+  <span><span class="swatch b3"></span>Бригада 3</span>
+  <span><span class="swatch b4"></span>Бригада 4</span>
+  <span><span class="swatch" style="background:#f4f4f4;border:1px solid #ccc;"></span>Вихідний бригади</span>
+  <span style="color:#999;">— рожевий рядок: вихідний день тижня</span>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Дата</th>
+      <th>День тижня</th>
+      <th>Денна зміна<br>8:00–19:00</th>
+      <th>Нічна зміна<br>19:00–8:00</th>
+      <th>Відпочивають</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<h2>Підсумок за місяць</h2>
+<table class="stats">
+  <thead>
+    <tr>
+      <th>Бригада</th>
+      <th>Денних змін</th>
+      <th>Нічних змін</th>
+      <th>Годин усього</th>
+      <th>Відпрацьовано днів</th>
+      <th>Вихідних</th>
+    </tr>
+  </thead>
+  <tbody id="statsBody"></tbody>
+</table>
+
+<div class="note">
+  Логіка: бригада, що працює денну зміну 1-го числа, наступного дня встає в нічну.
+  Далі кожна бригада циклічно проходить: день → ніч (через добу) → 2 доби відпочинку → знову день.
+  Нічна зміна N-го числа належить бригаді, яка напередодні була на денній.
+  Середня норма: 24 години за 4-денний цикл = 42 години на тиждень.
+</div>
+
+<script>
+const MONTHS = ["Січень","Лютий","Березень","Квітень","Травень","Червень",
+                "Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
+const WD_SHORT = ["нд","пн","вт","ср","чт","пт","сб"];
+
+const monthSel = document.getElementById("monthSel");
+const startSel = document.getElementById("startSel");
+
+// Діапазон місяців: листопад 2026 — грудень 2027
+(function fillMonths() {
+  const now = new Date();
+  for (let y = 2026; y <= 2027; y++) {
+    for (let m = 0; m < 12; m++) {
+      if (y === 2026 && m < 10) continue; // з листопада 2026
+      const o = document.createElement("option");
+      o.value = y + "-" + m;
+      o.textContent = MONTHS[m] + " " + y;
+      monthSel.appendChild(o);
+    }
+  }
+  monthSel.value = "2026-10";
+})();
+
+function cls(b) { return "b" + b; }
+
+function render() {
+  const [y, m] = monthSel.value.split("-").map(Number);
+  const startB = parseInt(startSel.value, 10);
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+
+  const stats = {};
+  for (let b = 1; b <= 4; b++) stats[b] = { day: 0, night: 0 };
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(y, m, d);
+    const wd = date.getDay();
+    const isWeekend = (wd === 0 || wd === 6);
+
+    // бригада на денній зміні: зсув від початкової
+    const dayB = ((d - 1) % 4 + (startB - 1)) % 4 + 1;
+    // бригада на нічній: та, що напередодні була на денній (d-1)
+    const nightB = (((d - 2) % 4 + 4) % 4 + (startB - 1)) % 4 + 1;
+
+    stats[dayB].day++;
+    stats[nightB].night++;
+
+    const resting = [1, 2, 3, 4].filter(b => b !== dayB && b !== nightB);
+
+    const iso = y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+    const isToday = (iso === todayStr);
+
+    const tr = document.createElement("tr");
+    if (isWeekend) tr.className = "weekend";
+    if (isToday) tr.classList.add("today");
+
+    tr.innerHTML =
+      "<td class='date'>" + String(d).padStart(2, "0") + "." + String(m + 1).padStart(2, "0") + "</td>" +
+      "<td>" + WD_SHORT[wd] + "</td>" +
+      "<td class='cell " + cls(dayB) + "'>Бригада " + dayB + " (Д)</td>" +
+      "<td class='cell " + cls(nightB) + "'>Бригада " + nightB + " (Н)</td>" +
+      "<td class='restcell'>" + resting.map(b => "Б-" + b).join(", ") + "</td>";
+    tbody.appendChild(tr);
+  }
+
+  const statsBody = document.getElementById("statsBody");
+  statsBody.innerHTML = "";
+  for (let b = 1; b <= 4; b++) {
+    const s = stats[b];
+    const hours = s.day * 11 + s.night * 13;
+    const workedDays = s.day + s.night;
+    const restDays = daysInMonth - workedDays;
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td class='" + cls(b) + "'>Бригада " + b + "</td>" +
+      "<td>" + s.day + "</td>" +
+      "<td>" + s.night + "</td>" +
+      "<td>" + hours + "</td>" +
+      "<td>" + workedDays + "</td>" +
+      "<td>" + restDays + "</td>";
+    statsBody.appendChild(tr);
+  }
+}
+
+monthSel.addEventListener("change", render);
+startSel.addEventListener("change", render);
+render();
+</script>
+
+</body>
+</html>
